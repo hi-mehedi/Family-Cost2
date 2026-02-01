@@ -77,13 +77,13 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       <div className="w-full max-w-md z-10">
         <div className="text-center mb-10">
           <div className="w-20 h-20 bg-white/20 backdrop-blur-md rounded-[30px] flex items-center justify-center mx-auto mb-6 border border-white/30 shadow-2xl">
-            <i className="fas fa-sync-alt text-white text-3xl"></i>
+            <i className="fas fa-home text-white text-3xl"></i>
           </div>
-          <h1 className="text-3xl font-black text-white tracking-tighter">Fleet Tracker</h1>
-          <p className="text-indigo-200 text-xs font-black uppercase tracking-widest mt-2 opacity-80">Sync Across All Devices</p>
+          <h1 className="text-3xl font-black text-white tracking-tighter">Family Cost</h1>
+          <p className="text-indigo-200 text-[10px] font-black uppercase tracking-widest mt-2 opacity-80">Professional Finance Management</p>
         </div>
 
-        <div className="bg-white p-8 rounded-[40px] shadow-2xl border border-indigo-100/20">
+        <div className="bg-white p-8 rounded-[40px] shadow-2xl border border-indigo-100/20 relative">
           <form onSubmit={handleAuth} className="space-y-4">
             {error && <div className="bg-rose-50 text-rose-500 text-[10px] font-black p-3 rounded-2xl border border-rose-100 uppercase tracking-widest text-center">{error}</div>}
             
@@ -122,6 +122,10 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             <button onClick={() => { setIsImporting(!isImporting); setIsRegistering(false); }} className="text-[10px] font-black text-indigo-500 uppercase tracking-widest bg-indigo-50 py-2 rounded-xl">
               {isImporting ? 'Back to standard login' : 'Login on new mobile? Use Sync'}
             </button>
+          </div>
+          
+          <div className="mt-8 text-center opacity-40">
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Developed by Mehedi Hasan Soumik</p>
           </div>
         </div>
       </div>

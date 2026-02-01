@@ -84,10 +84,10 @@ const App: React.FC = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
              <div className="bg-white/20 p-2 rounded-2xl border border-white/20">
-               <i className="fas fa-home-user text-white"></i>
+               <i className="fas fa-home text-white"></i>
              </div>
              <div>
-               <h1 className="text-xl font-black tracking-tight">Family Daily Cost</h1>
+               <h1 className="text-xl font-black tracking-tight">Family Cost</h1>
                <div className="flex items-center gap-2">
                  <p className="text-indigo-200 text-[9px] font-black uppercase tracking-widest">{user.email}</p>
                  <span className="bg-emerald-500 w-1.5 h-1.5 rounded-full"></span>
@@ -150,6 +150,17 @@ const App: React.FC = () => {
             onEdit={handleEditRequest} 
           />
         )}
+        
+        {/* Footer Attribution */}
+        <div className="py-8 text-center border-t border-slate-100 mt-6">
+           <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Family Cost</p>
+           <p className="text-[11px] font-black text-indigo-600 uppercase tracking-widest">Developed by Mehedi Hasan Soumik</p>
+           <div className="flex justify-center gap-4 mt-3 opacity-30">
+             <i className="fas fa-code text-[10px]"></i>
+             <i className="fas fa-database text-[10px]"></i>
+             <i className="fas fa-shield-alt text-[10px]"></i>
+           </div>
+        </div>
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-2 flex justify-around items-center z-20 md:static md:bg-transparent md:border-none md:p-6 md:justify-center md:gap-8">

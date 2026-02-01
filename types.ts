@@ -1,4 +1,4 @@
-export type UnitName = "Car" | "Ris - Sharif-1" | "Ris - Sharif-2" | "Auto" | "Ris - Roman-1" | "Ris - Roman-2";
+export type UnitName = "Car" | "Ris-new1" | "Ris-Roman1" | "Ris-Roman2" | "Ris-2" | "Auto";
 
 export interface UnitEntry {
   income: number;
@@ -40,11 +40,11 @@ export interface AppState {
 
 export const UNIT_NAMES: UnitName[] = [
   "Car",
-  "Ris - Sharif-1",
-  "Ris - Sharif-2",
-  "Auto",
-  "Ris - Roman-1",
-  "Ris - Roman-2"
+  "Ris-new1",
+  "Ris-Roman1",
+  "Ris-Roman2",
+  "Ris-2",
+  "Auto"
 ];
 
 export type ActiveTab = 'dashboard' | 'entry' | 'history';
