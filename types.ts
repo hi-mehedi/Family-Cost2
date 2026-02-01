@@ -29,6 +29,13 @@ export interface DailyEntry {
 export interface AuthUser {
   email: string;
   id: string;
+  syncToken?: string;
+}
+
+export interface AppState {
+  entries: DailyEntry[];
+  user: AuthUser;
+  registeredUsers: Record<string, string>;
 }
 
 export const UNIT_NAMES: UnitName[] = [
