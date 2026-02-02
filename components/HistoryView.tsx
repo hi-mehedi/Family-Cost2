@@ -13,14 +13,14 @@ const HistoryView: React.FC<HistoryViewProps> = ({ entries, onEdit }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [inspectVersionId, setInspectVersionId] = useState<string | null>(null);
 
-  const filteredEntries = useMemo(() => 
+  const filteredEntries = useMemo(() =>
     entries.filter(e => e.date.startsWith(selectedMonth) && !e.isHistory)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
   , [entries, selectedMonth]);
 
   const handleExport = () => {
     if (filteredEntries.length === 0) return alert("No data to export.");
-    let csv = "Date,Total Income,Vehicle Cost,Bazar Cost,Balance\n";
+    let csv = "Date,Total Income,Vehicle Cost,Bazar Cost,Balances\n";
     filteredEntries.forEach(e => csv += `${e.date},${e.totalIncome},${e.totalVehicleCost},${e.bazarCosts},${e.availableBalance}\n`);
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -92,7 +92,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ entries, onEdit }) => {
         <div className="space-y-3">
           {filteredEntries.map((entry) => {
             const historyTrail = entries.filter(e => e.isHistory && (e.parentId === (entry.parentId || entry.id) || (e.id === entry.parentId)));
-            
+
             return (
               <div key={entry.id} className={`bg-white rounded-[32px] shadow-sm border transition-all ${expandedId === entry.id ? 'border-indigo-200 ring-4 ring-indigo-500/5' : 'border-slate-100'}`}>
                 <div className="p-4 flex items-center justify-between cursor-pointer" onClick={() => { setExpandedId(expandedId === entry.id ? null : entry.id); setInspectVersionId(null); }}>
@@ -152,7 +152,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ entries, onEdit }) => {
                         </div>
                       </div>
                     )}
-                    
+
                     <div className="flex justify-center items-center pt-4 border-t border-slate-100">
                       <button onClick={(e) => { e.stopPropagation(); onEdit(entry); }} className="w-full py-4 bg-indigo-600 text-white text-xs font-black rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-100 active:scale-95 transition-all"><i className="fas fa-edit"></i> UPDATE RECORD</button>
                     </div>
