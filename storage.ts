@@ -1,17 +1,17 @@
 import { DailyEntry, AuthUser } from './types';
 
-const ENTRIES_KEY = 'family_cost_master_v22';
-const USER_KEY = 'family_cost_user_master_v22';
+const ENTRIES_KEY = 'family_cost_master_v30';
+const USER_KEY = 'family_cost_user_master_v30';
 
 // Hardcoded Admin Credentials
 const ADMIN_EMAIL = 'mehedi.admin@gmail.com';
 const ADMIN_PASS = '123456';
 
 /**
- * MASTER CLOUD TUNNEL V22
- * Uses a new bucket ID for Family Cost to ensure a fresh start.
+ * MASTER CLOUD TUNNEL V30 - "Master-Pulse"
+ * Using a fresh bucket for the Family Cost rebrand.
  */
-const BUCKET_ID = 'Family_Cost_V22';
+const BUCKET_ID = 'Family_Cost_Pulse_V30';
 
 export const saveEntriesLocally = (entries: DailyEntry[]): void => {
   localStorage.setItem(ENTRIES_KEY, JSON.stringify(entries));
@@ -21,7 +21,8 @@ export const getEntriesLocally = (): DailyEntry[] => {
   const data = localStorage.getItem(ENTRIES_KEY);
   if (!data) return [];
   try {
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+    return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
     return [];
   }
@@ -39,7 +40,11 @@ export const saveUser = (user: AuthUser | null): void => {
 export const getUser = (): AuthUser | null => {
   const data = localStorage.getItem(USER_KEY);
   if (!data) return null;
-  return JSON.parse(data);
+  try {
+    return JSON.parse(data);
+  } catch (e) {
+    return null;
+  }
 };
 
 export const validateAdmin = (email: string, pass: string): boolean => {
@@ -47,8 +52,8 @@ export const validateAdmin = (email: string, pass: string): boolean => {
 };
 
 /**
- * MASTER CLOUD PUSH
- * Pushes data to a unique key defined by the user's sync token.
+ * PUSH TO CLOUD
+ * Sends local data to the global token channel.
  */
 export const pushToCloud = async (entries: DailyEntry[], token: string): Promise<boolean> => {
   if (!token) return false;
@@ -56,7 +61,8 @@ export const pushToCloud = async (entries: DailyEntry[], token: string): Promise
     const payload = {
       entries,
       updatedAt: Date.now(),
-      sender: navigator.userAgent.includes('Mobi') ? 'Mobile' : 'Laptop'
+      v: 30,
+      client: navigator.userAgent.includes('Mobi') ? 'Mobile' : 'Laptop'
     };
     
     const url = `https://kvdb.io/${BUCKET_ID}/${token}`;
@@ -64,31 +70,31 @@ export const pushToCloud = async (entries: DailyEntry[], token: string): Promise
     const response = await fetch(url, {
       method: 'POST',
       body: JSON.stringify(payload),
-      mode: 'cors',
-      headers: {
-        'Content-Type': 'text/plain' // Simplified header to avoid CORS preflight issues on some mobile browsers
-      }
+      mode: 'cors'
     });
 
     return response.ok;
   } catch (e) {
-    console.error("Cloud Push Failed:", e);
+    console.error("Cloud Broadcast Failed:", e);
     return false;
   }
 };
 
 /**
- * MASTER CLOUD PULL
- * Pulls data from the cloud using the sync token.
+ * PULL FROM CLOUD
+ * Fetches the most recent global state for the token.
  */
 export const pullFromCloud = async (token: string): Promise<{ entries: DailyEntry[], updatedAt: number } | null> => {
   if (!token) return null;
   try {
-    const url = `https://kvdb.io/${BUCKET_ID}/${token}?cache_bust=${Date.now()}`;
+    // Aggressive cache busting with random noise + timestamp
+    const noise = Math.random().toString(36).substring(7);
+    const url = `https://kvdb.io/${BUCKET_ID}/${token}?cb=${Date.now()}&n=${noise}`;
+    
     const response = await fetch(url, {
       method: 'GET',
       mode: 'cors',
-      cache: 'no-store'
+      cache: 'no-cache'
     });
     
     if (response.status === 404) {
@@ -103,21 +109,7 @@ export const pullFromCloud = async (token: string): Promise<{ entries: DailyEntr
     }
     return null;
   } catch (e) {
-    console.error("Cloud Pull Failed:", e);
+    console.error("Cloud Pulse Failed:", e);
     return null;
-  }
-};
-
-export const importState = (token: string): boolean => {
-  try {
-    const decoded = atob(token);
-    const data = JSON.parse(decoded);
-    if (data && Array.isArray(data.entries)) {
-      saveEntriesLocally(data.entries);
-      return true;
-    }
-    return false;
-  } catch (e) {
-    return false;
   }
 };
