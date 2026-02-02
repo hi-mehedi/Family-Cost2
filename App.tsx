@@ -19,66 +19,76 @@ const App: React.FC = () => {
   const [editingEntry, setEditingEntry] = useState<DailyEntry | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isInitialSyncing, setIsInitialSyncing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<number>(Date.now());
   
-  const lastCloudTimestamp = useRef<number>(0);
+  const cloudUpdatedAtRef = useRef<number>(0);
+  const retryCountRef = useRef<number>(0);
 
   /**
-   * PULL LATEST FROM CLOUD
-   * Ensures this device matches the Master Cloud Record.
+   * THE MASTER SYNC LOGIC
+   * With automatic retry mechanism for unstable mobile connections.
    */
   const performSync = useCallback(async (isInitial = false) => {
     if (isSyncing && !isInitial) return;
-    setIsSyncing(true);
     
+    setIsSyncing(true);
     try {
       const cloudData = await pullFromCloud();
-      if (cloudData && cloudData.entries) {
-        // If cloud data is newer OR we are starting up, update local view
-        if (isInitial || cloudData.updatedAt > lastCloudTimestamp.current) {
-           setEntries(cloudData.entries);
-           saveEntriesLocally(cloudData.entries);
-           lastCloudTimestamp.current = cloudData.updatedAt;
-        }
+      
+      if (cloudData) {
         setSyncError(false);
-      } else if (isInitial && !cloudData) {
-        // If it's a first time login and cloud is empty, we keep local
-        console.log("Cloud is empty or unreachable on startup.");
+        retryCountRef.current = 0; // Reset retries on success
+        
+        if (isInitial || cloudData.updatedAt > cloudUpdatedAtRef.current) {
+          setEntries(cloudData.entries);
+          saveEntriesLocally(cloudData.entries);
+          cloudUpdatedAtRef.current = cloudData.updatedAt;
+        }
+        setLastSyncTime(Date.now());
+      } else {
+        throw new Error("Failed to fetch data");
       }
-      setLastSyncTime(Date.now());
     } catch (e) {
-      setSyncError(true);
+      console.warn("Sync attempt failed, retrying...", retryCountRef.current);
+      if (retryCountRef.current < 3) {
+        retryCountRef.current += 1;
+        setTimeout(() => performSync(isInitial), 2000);
+      } else {
+        setSyncError(true);
+      }
     } finally {
       setIsSyncing(false);
     }
   }, [isSyncing]);
 
-  // Handle Login and Initial Load
+  // Bootup
   useEffect(() => {
     const startup = async () => {
       const savedUser = getUser();
       setUser(savedUser);
       
-      // Load whatever we have locally first
-      setEntries(getEntriesLocally());
-
       if (savedUser) {
-        // BUT IMMEDIATELY override with cloud data to ensure laptop data shows up
+        setIsInitialSyncing(true);
+        // We MUST get data from cloud on start
         await performSync(true);
+        setIsInitialSyncing(false);
+      } else {
+        setEntries(getEntriesLocally());
       }
       setIsLoaded(true);
     };
     startup();
   }, []);
 
-  // Aggressive Polling: Check every 4 seconds
+  // Background Sync Loop
   useEffect(() => {
     if (!user) return;
     const interval = setInterval(() => {
       performSync();
-    }, 4000); 
+    }, 10000); // 10 seconds is safer for rate limits
     return () => clearInterval(interval);
   }, [user, performSync]);
 
@@ -97,16 +107,14 @@ const App: React.FC = () => {
       updated = [...entries, entry];
     }
     
-    // 1. Update UI and Local Storage for speed
     setEntries(updated);
     saveEntriesLocally(updated);
     setActiveTab('dashboard');
 
-    // 2. BROADCAST to Cloud so Mobile/Laptop sees it
     setIsSyncing(true);
     const success = await pushToCloud(updated);
     if (success) {
-      lastCloudTimestamp.current = Date.now();
+      cloudUpdatedAtRef.current = Date.now();
       setSyncError(false);
     } else {
       setSyncError(true);
@@ -126,20 +134,38 @@ const App: React.FC = () => {
   };
 
   const handleLogout = () => {
-    saveUser(null);
-    setUser(null);
-    setEntries([]);
+    if (window.confirm("Logout from Fleet Cloud?")) {
+      saveUser(null);
+      setUser(null);
+      setEntries([]);
+    }
   };
 
-  if (!isLoaded) {
+  if (!isLoaded || isInitialSyncing) {
     return (
-      <div className="min-h-screen bg-indigo-700 flex flex-col items-center justify-center text-white p-10 text-center">
-        <div className="relative w-20 h-20 mb-8">
-           <div className="absolute inset-0 border-4 border-white/20 rounded-full"></div>
-           <div className="absolute inset-0 border-4 border-t-white rounded-full animate-spin"></div>
+      <div className="min-h-screen bg-indigo-950 flex flex-col items-center justify-center text-white p-10 text-center">
+        <div className="relative mb-8">
+           <div className="w-24 h-24 border-8 border-white/5 rounded-full"></div>
+           <div className="w-24 h-24 border-8 border-t-emerald-400 rounded-full animate-spin absolute top-0 left-0"></div>
+           <div className="absolute inset-0 flex items-center justify-center">
+             <i className="fas fa-satellite text-3xl text-emerald-400 animate-pulse"></i>
+           </div>
         </div>
-        <h2 className="text-xl font-black uppercase tracking-[0.2em]">Master Sync</h2>
-        <p className="text-indigo-200 text-xs mt-4 font-bold opacity-80 uppercase tracking-widest">Downloading Laptop Data to Mobile...</p>
+        <h2 className="text-2xl font-black uppercase tracking-[0.4em] mb-4">Connecting...</h2>
+        <div className="bg-white/5 border border-white/10 p-5 rounded-3xl backdrop-blur-md max-w-xs shadow-2xl">
+          <p className="text-indigo-200 text-[10px] font-black uppercase tracking-widest leading-relaxed">
+            Linking Mobile to Laptop Cloud...<br/>
+            {syncError ? "Connection unstable, retrying..." : "Establishing Secure Data Tunnel"}
+          </p>
+          {syncError && (
+            <button 
+              onClick={() => performSync(true)} 
+              className="mt-4 bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+            >
+              Force Retry
+            </button>
+          )}
+        </div>
       </div>
     );
   }
@@ -147,9 +173,9 @@ const App: React.FC = () => {
   if (!user) {
     return <Login onLogin={async (u) => { 
       setUser(u); 
-      setIsSyncing(true);
-      await performSync(true); // Pull everything immediately after login
-      setIsSyncing(false);
+      setIsInitialSyncing(true);
+      await performSync(true); 
+      setIsInitialSyncing(false);
     }} />;
   }
 
@@ -157,22 +183,22 @@ const App: React.FC = () => {
     <div className="min-h-screen flex flex-col max-w-md mx-auto bg-slate-50 relative pb-20 md:max-w-4xl md:pb-0">
       <header className="bg-indigo-700 text-white p-6 pt-10 sticky top-0 z-10 shadow-lg md:rounded-b-[40px]">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-             <div className="bg-white/20 p-2 rounded-2xl border border-white/20 relative">
-               <i className="fas fa-cloud-bolt text-white"></i>
-               {isSyncing && (
-                 <span className="absolute -top-1 -right-1 flex h-3 w-3">
+          <div className="flex items-center gap-4">
+             <div className={`p-3 rounded-2xl border transition-all relative ${syncError ? 'bg-rose-500/20 border-rose-500/50' : 'bg-white/10 border-white/10'}`}>
+               <i className={`fas ${syncError ? 'fa-triangle-exclamation text-rose-400' : 'fa-broadcast-tower text-white'}`}></i>
+               {!syncError && isSyncing && (
+                 <span className="absolute -top-1 -right-1 flex h-4 w-4">
                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                   <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                   <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500 border-2 border-indigo-700"></span>
                  </span>
                )}
              </div>
              <div>
-               <h1 className="text-xl font-black tracking-tight leading-none uppercase">Fleet Cloud</h1>
-               <div className="flex items-center gap-2 mt-1">
-                 <div className={`w-1.5 h-1.5 rounded-full ${syncError ? 'bg-rose-500 animate-pulse' : 'bg-emerald-400 shadow-[0_0_5px_#10b981]'}`}></div>
-                 <p className="text-indigo-200 text-[8px] font-black uppercase tracking-widest">
-                   {syncError ? 'Sync Error' : isSyncing ? 'Syncing...' : 'Cloud Verified'}
+               <h1 className="text-xl font-black tracking-tight leading-none uppercase italic">Fleet Cloud</h1>
+               <div className="flex items-center gap-2 mt-2">
+                 <div className={`w-2 h-2 rounded-full ${syncError ? 'bg-rose-500 animate-pulse' : 'bg-emerald-400 shadow-[0_0_10px_#10b981]'}`}></div>
+                 <p className="text-indigo-200 text-[9px] font-black uppercase tracking-widest">
+                   {syncError ? 'Reconnecting...' : isSyncing ? 'Syncing...' : 'Connected'}
                  </p>
                </div>
              </div>
@@ -181,22 +207,23 @@ const App: React.FC = () => {
             <button 
               onClick={() => performSync(true)} 
               disabled={isSyncing}
-              className={`bg-white/10 hover:bg-white/20 p-3 rounded-2xl transition-all border border-white/10 ${isSyncing ? 'animate-spin' : ''}`}
+              className={`bg-white/10 hover:bg-white/20 p-3.5 rounded-2xl transition-all border border-white/10 ${isSyncing ? 'opacity-50' : ''}`}
             >
-              <i className="fas fa-rotate text-xs"></i>
+              <i className={`fas fa-sync-alt text-xs ${isSyncing ? 'animate-spin' : ''}`}></i>
             </button>
-            <button onClick={handleLogout} className="bg-white/10 hover:bg-white/20 p-3 rounded-2xl transition-all border border-white/10">
+            <button onClick={handleLogout} className="bg-white/10 hover:bg-white/20 p-3.5 rounded-2xl transition-all border border-white/10">
               <i className="fas fa-power-off text-xs text-rose-300"></i>
             </button>
           </div>
         </div>
       </header>
 
-      {/* Connection Indicator Bar */}
-      <div className={`text-center py-1 transition-all ${syncError ? 'bg-rose-600' : 'bg-emerald-600'}`}>
-        <p className="text-[7px] font-black text-white uppercase tracking-[0.4em]">
-          {syncError ? '⚠️ SYNC FAILED - RECONNECTING' : '✓ MOBILE & LAPTOP IN SYNC'}
+      {/* Sync Status Banner */}
+      <div className={`text-center py-2 transition-all shadow-inner relative ${syncError ? 'bg-rose-600' : 'bg-emerald-600'}`}>
+        <p className="text-[7px] font-black text-white uppercase tracking-[0.5em] relative z-10">
+          {syncError ? '⚠️ SYNC INTERRUPTED - ATTEMPTING RECOVERY' : `✓ CLOUD MASTER VERIFIED • ${new Date(lastSyncTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`}
         </p>
+        {syncError && <div className="absolute inset-0 bg-white/10 animate-pulse"></div>}
       </div>
 
       <main className="flex-1 p-4 overflow-y-auto">
@@ -216,46 +243,45 @@ const App: React.FC = () => {
           />
         )}
         
-        <div className="py-8 text-center border-t border-slate-100 mt-6">
-           <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Family Cost Monitor</p>
-           <p className="text-[11px] font-black text-indigo-600 uppercase tracking-widest">Developed by Mehedi Hasan Soumik</p>
-           <div className="flex justify-center gap-4 mt-3 opacity-30">
-             <i className="fas fa-globe text-[10px]" title="Global Sync"></i>
-             <i className="fas fa-shield-halved text-[10px]" title="Admin Encrypted"></i>
-             <i className="fas fa-database text-[10px]" title="Cloud Hosted"></i>
+        <div className="py-12 text-center border-t border-slate-200/50 mt-10">
+           <p className="text-[12px] font-black text-indigo-600 uppercase tracking-[0.2em]">Developed by Mehedi Hasan Soumik</p>
+           <div className="flex justify-center gap-8 mt-6 opacity-20 grayscale hover:grayscale-0 transition-all cursor-default">
+             <i className="fas fa-laptop text-lg"></i>
+             <i className="fas fa-cloud text-xs mt-1 animate-bounce"></i>
+             <i className="fas fa-mobile-screen text-lg"></i>
            </div>
         </div>
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-2 flex justify-around items-center z-20 md:static md:bg-transparent md:border-none md:p-6 md:justify-center md:gap-8">
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-4 py-3 flex justify-around items-center z-20 md:static md:bg-transparent md:border-none md:p-6 md:justify-center md:gap-10">
         <button 
           onClick={() => { setEditingEntry(null); setActiveTab('dashboard'); }}
           className={`flex flex-col items-center gap-1 p-2 min-w-[64px] transition-all ${activeTab === 'dashboard' ? 'text-indigo-600' : 'text-slate-400'}`}
         >
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${activeTab === 'dashboard' ? 'bg-indigo-100' : 'bg-transparent'}`}>
-            <i className="fas fa-chart-line text-lg"></i>
+          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-transparent'}`}>
+            <i className="fas fa-chart-pie text-xl"></i>
           </div>
-          <span className="text-[10px] font-bold uppercase tracking-tighter">Stats</span>
+          <span className="text-[9px] font-black uppercase tracking-tighter">Stats</span>
         </button>
 
         <button 
           onClick={() => { setEditingEntry(null); setActiveTab('entry'); }}
           className={`flex flex-col items-center gap-1 p-2 min-w-[64px] transition-all ${activeTab === 'entry' && !editingEntry ? 'text-indigo-600' : 'text-slate-400'}`}
         >
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${activeTab === 'entry' && !editingEntry ? 'bg-indigo-100' : 'bg-transparent'}`}>
-            <i className="fas fa-plus-square text-lg"></i>
+          <div className={`w-14 h-14 rounded-3xl flex items-center justify-center shadow-xl -mt-8 transition-all ${activeTab === 'entry' && !editingEntry ? 'bg-indigo-600 text-white scale-110' : 'bg-slate-100 text-slate-400'}`}>
+            <i className="fas fa-plus text-2xl"></i>
           </div>
-          <span className="text-[10px] font-bold uppercase tracking-tighter">Record</span>
+          <span className="text-[9px] font-black uppercase tracking-tighter mt-1">Record</span>
         </button>
 
         <button 
           onClick={() => { setEditingEntry(null); setActiveTab('history'); }}
           className={`flex flex-col items-center gap-1 p-2 min-w-[64px] transition-all ${activeTab === 'history' ? 'text-indigo-600' : 'text-slate-400'}`}
         >
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${activeTab === 'history' ? 'bg-indigo-100' : 'bg-transparent'}`}>
-            <i className="fas fa-book-open text-lg"></i>
+          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${activeTab === 'history' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-transparent'}`}>
+            <i className="fas fa-history text-xl"></i>
           </div>
-          <span className="text-[10px] font-bold uppercase tracking-tighter">History</span>
+          <span className="text-[9px] font-black uppercase tracking-tighter">History</span>
         </button>
       </nav>
     </div>
