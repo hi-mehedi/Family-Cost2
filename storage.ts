@@ -8,8 +8,7 @@ const LAST_SYNC_KEY = 'family_cost_last_sync_v2';
 const ADMIN_EMAIL = 'mehedi.admin@gmail.com';
 const ADMIN_PASS = '123456';
 
-// Public KV storage for "Live Sync" without a backend.
-// This bucket is unique to this app version and admin email.
+// Unique bucket for the admin account
 const CLOUD_STORAGE_URL = 'https://kvdb.io/FamilyCost_Mehedi_Live_V1/state';
 
 export const saveEntriesLocally = (entries: DailyEntry[]): void => {
@@ -45,18 +44,25 @@ export const validateAdmin = (email: string, pass: string): boolean => {
 };
 
 /**
- * Pushes the current state to the cloud for other devices to see.
+ * Pushes data to cloud immediately. 
+ * Includes a timestamp to ensure order of operations.
  */
 export const pushToCloud = async (entries: DailyEntry[]): Promise<boolean> => {
   try {
+    const payload = {
+      entries,
+      updatedAt: Date.now(),
+      v: 2
+    };
+    
     const response = await fetch(CLOUD_STORAGE_URL, {
       method: 'POST',
-      body: JSON.stringify({
-        entries,
-        updatedAt: Date.now(),
-        client: 'Mehedi_Mobile'
-      }),
+      body: JSON.stringify(payload),
+      headers: {
+        'Content-Type': 'application/json'
+      }
     });
+
     if (response.ok) {
       localStorage.setItem(LAST_SYNC_KEY, Date.now().toString());
       return true;
@@ -69,29 +75,30 @@ export const pushToCloud = async (entries: DailyEntry[]): Promise<boolean> => {
 };
 
 /**
- * Pulls the latest state from the cloud.
+ * Pulls from cloud with cache-busting to ensure "Live" feel.
  */
 export const pullFromCloud = async (): Promise<{ entries: DailyEntry[], updatedAt: number } | null> => {
   try {
-    const response = await fetch(CLOUD_STORAGE_URL);
+    // Add cache-busting query param to bypass browser/network caching
+    const response = await fetch(`${CLOUD_STORAGE_URL}?t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: {
+        'Pragma': 'no-cache',
+        'Cache-Control': 'no-cache'
+      }
+    });
+    
     if (response.ok) {
       const data = await response.json();
-      return data;
+      // Basic validation to ensure we got real data
+      if (data && Array.isArray(data.entries)) {
+        return data;
+      }
     }
     return null;
   } catch (e) {
     return null;
   }
-};
-
-// Keeping legacy sync as a backup
-export const exportState = (): string => {
-  const state: AppState = {
-    entries: getEntriesLocally(),
-    user: getUser()!,
-    registeredUsers: { [ADMIN_EMAIL]: ADMIN_PASS }
-  };
-  return btoa(unescape(encodeURIComponent(JSON.stringify(state))));
 };
 
 export const importState = (token: string): boolean => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { DailyEntry, ActiveTab, AuthUser } from './types';
 import { 
   getEntriesLocally, 
@@ -21,6 +21,10 @@ const App: React.FC = () => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<number>(Date.now());
+  const [cloudUpdatedAt, setCloudUpdatedAt] = useState<number>(0);
+  
+  // Use a ref to keep track of the latest entries for the interval to compare
+  const entriesRef = useRef<DailyEntry[]>([]);
 
   // Function to sync with cloud database
   const syncWithCloud = useCallback(async (forcePull = false) => {
@@ -30,13 +34,12 @@ const App: React.FC = () => {
     try {
       const cloudData = await pullFromCloud();
       if (cloudData && cloudData.entries) {
-        const localEntries = getEntriesLocally();
-        
-        // Update local state if cloud data exists and is different
-        // In this implementation, cloud is the "Source of Truth"
-        if (forcePull || JSON.stringify(cloudData.entries) !== JSON.stringify(localEntries)) {
+        // If cloud data is newer or we are forcing, update local state
+        if (forcePull || cloudData.updatedAt > cloudUpdatedAt) {
            setEntries(cloudData.entries);
+           entriesRef.current = cloudData.entries;
            saveEntriesLocally(cloudData.entries);
+           setCloudUpdatedAt(cloudData.updatedAt);
         }
       }
       setLastSyncTime(Date.now());
@@ -45,26 +48,29 @@ const App: React.FC = () => {
     } finally {
       setIsSyncing(false);
     }
-  }, [isSyncing]);
+  }, [isSyncing, cloudUpdatedAt]);
 
   useEffect(() => {
     const initUser = getUser();
+    const local = getEntriesLocally();
     setUser(initUser);
-    setEntries(getEntriesLocally());
+    setEntries(local);
+    entriesRef.current = local;
     setIsLoaded(true);
 
     if (initUser) {
+      // Immediate pull on start to get latest from other devices
       syncWithCloud(true);
     }
   }, []);
 
-  // Live Auto-Update Polling: Check cloud every 10 seconds
+  // Live Auto-Update Polling: Check cloud every 5 seconds for "Fast" feel
   useEffect(() => {
     if (!user) return;
     
     const interval = setInterval(() => {
       syncWithCloud();
-    }, 10000); 
+    }, 5000); 
 
     return () => clearInterval(interval);
   }, [user, syncWithCloud]);
@@ -84,14 +90,18 @@ const App: React.FC = () => {
       updated = [...entries, entry];
     }
     
-    // Save locally for speed
+    // Save locally for instant UI response
     setEntries(updated);
+    entriesRef.current = updated;
     saveEntriesLocally(updated);
     setActiveTab('dashboard');
 
-    // Push to cloud immediately for other mobiles
+    // Push to cloud IMMEDIATELY
     setIsSyncing(true);
-    await pushToCloud(updated);
+    const success = await pushToCloud(updated);
+    if (success) {
+      setCloudUpdatedAt(Date.now());
+    }
     setIsSyncing(false);
     setLastSyncTime(Date.now());
   };
@@ -134,10 +144,10 @@ const App: React.FC = () => {
              <div>
                <h1 className="text-xl font-black tracking-tight">Family Cost</h1>
                <div className="flex items-center gap-2">
-                 <p className="text-indigo-200 text-[9px] font-black uppercase tracking-widest">Admin Cloud Active</p>
-                 <span className={`w-1.5 h-1.5 rounded-full ${isSyncing ? 'bg-emerald-400' : 'bg-indigo-400 opacity-50'}`}></span>
+                 <p className="text-indigo-200 text-[9px] font-black uppercase tracking-widest">Admin Live</p>
+                 <span className={`w-1.5 h-1.5 rounded-full ${isSyncing ? 'bg-emerald-400' : 'bg-emerald-500 shadow-[0_0_5px_#10b981]'}`}></span>
                  <p className="text-[7px] text-indigo-300 font-bold uppercase">
-                   Synced {new Date(lastSyncTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                   Updated {new Date(lastSyncTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                  </p>
                </div>
              </div>
@@ -169,19 +179,18 @@ const App: React.FC = () => {
         {activeTab === 'history' && (
           <HistoryView 
             entries={entries} 
-            onDelete={() => {}} // Disabled as requested
+            onDelete={() => {}} 
             onEdit={handleEditRequest} 
           />
         )}
         
-        {/* Footer Attribution */}
         <div className="py-8 text-center border-t border-slate-100 mt-6">
            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Family Cost</p>
            <p className="text-[11px] font-black text-indigo-600 uppercase tracking-widest">Developed by Mehedi Hasan Soumik</p>
            <div className="flex justify-center gap-4 mt-3 opacity-30">
-             <i className="fas fa-cloud text-[10px]" title="Cloud Link Active"></i>
-             <i className="fas fa-wifi text-[10px]" title="Auto Sync Enabled"></i>
-             <i className="fas fa-shield-alt text-[10px]" title="Admin Secure"></i>
+             <i className="fas fa-cloud-bolt text-[10px]" title="Real-time Active"></i>
+             <i className="fas fa-bolt text-[10px]" title="Instant Push Enabled"></i>
+             <i className="fas fa-user-lock text-[10px]" title="Admin Secure"></i>
            </div>
         </div>
       </main>
