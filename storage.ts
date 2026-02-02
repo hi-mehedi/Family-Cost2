@@ -1,19 +1,17 @@
 import { DailyEntry, AuthUser } from './types';
 
-const ENTRIES_KEY = 'family_cost_master_v20';
-const USER_KEY = 'family_cost_user_master_v20';
+const ENTRIES_KEY = 'family_cost_master_v22';
+const USER_KEY = 'family_cost_user_master_v22';
 
 // Hardcoded Admin Credentials
 const ADMIN_EMAIL = 'mehedi.admin@gmail.com';
 const ADMIN_PASS = '123456';
 
 /**
- * MASTER CLOUD TUNNEL V20
- * We use a unique bucket and a specific key.
- * KVDB.io allows POST to set a value.
+ * MASTER CLOUD TUNNEL V22
+ * Uses a new bucket ID for Family Cost to ensure a fresh start.
  */
-const BUCKET_ID = 'Mehedi_Fleet_V20';
-const CLOUD_STORAGE_URL = `https://kvdb.io/${BUCKET_ID}/fleet_master`;
+const BUCKET_ID = 'Family_Cost_V22';
 
 export const saveEntriesLocally = (entries: DailyEntry[]): void => {
   localStorage.setItem(ENTRIES_KEY, JSON.stringify(entries));
@@ -50,39 +48,44 @@ export const validateAdmin = (email: string, pass: string): boolean => {
 
 /**
  * MASTER CLOUD PUSH
- * Sends the entire state to the cloud.
+ * Pushes data to a unique key defined by the user's sync token.
  */
-export const pushToCloud = async (entries: DailyEntry[]): Promise<boolean> => {
+export const pushToCloud = async (entries: DailyEntry[], token: string): Promise<boolean> => {
+  if (!token) return false;
   try {
     const payload = {
       entries,
       updatedAt: Date.now(),
-      device: navigator.userAgent.includes('Mobi') ? 'Mobile' : 'Laptop'
+      sender: navigator.userAgent.includes('Mobi') ? 'Mobile' : 'Laptop'
     };
     
-    // We use a POST request with no custom headers to avoid CORS Preflight blocks on mobile
-    const response = await fetch(CLOUD_STORAGE_URL, {
+    const url = `https://kvdb.io/${BUCKET_ID}/${token}`;
+    
+    const response = await fetch(url, {
       method: 'POST',
       body: JSON.stringify(payload),
-      mode: 'cors'
+      mode: 'cors',
+      headers: {
+        'Content-Type': 'text/plain' // Simplified header to avoid CORS preflight issues on some mobile browsers
+      }
     });
 
     return response.ok;
   } catch (e) {
-    console.error("V20 Push Failed:", e);
+    console.error("Cloud Push Failed:", e);
     return false;
   }
 };
 
 /**
  * MASTER CLOUD PULL
- * Fetches the shared record with aggressive cache-busting.
+ * Pulls data from the cloud using the sync token.
  */
-export const pullFromCloud = async (): Promise<{ entries: DailyEntry[], updatedAt: number } | null> => {
+export const pullFromCloud = async (token: string): Promise<{ entries: DailyEntry[], updatedAt: number } | null> => {
+  if (!token) return null;
   try {
-    // Add a unique timestamp to every request to force the mobile browser to fetch REAL data
-    const buster = Date.now();
-    const response = await fetch(`${CLOUD_STORAGE_URL}?t=${buster}`, {
+    const url = `https://kvdb.io/${BUCKET_ID}/${token}?cache_bust=${Date.now()}`;
+    const response = await fetch(url, {
       method: 'GET',
       mode: 'cors',
       cache: 'no-store'
@@ -100,7 +103,7 @@ export const pullFromCloud = async (): Promise<{ entries: DailyEntry[], updatedA
     }
     return null;
   } catch (e) {
-    console.error("V20 Pull Failed:", e);
+    console.error("Cloud Pull Failed:", e);
     return null;
   }
 };
