@@ -4,11 +4,11 @@ import { getBDTMonth } from '../utils/dateUtils';
 
 interface HistoryViewProps {
   entries: DailyEntry[];
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => void; // Kept in props but unused in UI per request
   onEdit: (entry: DailyEntry) => void;
 }
 
-const HistoryView: React.FC<HistoryViewProps> = ({ entries, onDelete, onEdit }) => {
+const HistoryView: React.FC<HistoryViewProps> = ({ entries, onEdit }) => {
   const [selectedMonth, setSelectedMonth] = useState(getBDTMonth());
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [inspectVersionId, setInspectVersionId] = useState<string | null>(null);
@@ -153,9 +153,8 @@ const HistoryView: React.FC<HistoryViewProps> = ({ entries, onDelete, onEdit }) 
                       </div>
                     )}
                     
-                    <div className="flex justify-between items-center pt-4 border-t border-slate-100">
-                      <button onClick={(e) => { e.stopPropagation(); onEdit(entry); }} className="px-6 py-3 bg-indigo-600 text-white text-[10px] font-black rounded-2xl flex items-center gap-2 shadow-lg shadow-indigo-100 active:scale-95 transition-all"><i className="fas fa-edit"></i> UPDATE CURRENT</button>
-                      <button onClick={(e) => { e.stopPropagation(); if(confirm('Permanently delete this record?')) onDelete(entry.id); }} className="px-4 py-3 text-rose-500 text-[10px] font-black hover:bg-rose-50 rounded-2xl flex items-center gap-2 transition-all border border-rose-100"><i className="fas fa-trash-alt"></i></button>
+                    <div className="flex justify-center items-center pt-4 border-t border-slate-100">
+                      <button onClick={(e) => { e.stopPropagation(); onEdit(entry); }} className="w-full py-4 bg-indigo-600 text-white text-xs font-black rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-100 active:scale-95 transition-all"><i className="fas fa-edit"></i> UPDATE RECORD</button>
                     </div>
                   </div>
                 )}
